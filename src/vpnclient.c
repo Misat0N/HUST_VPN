@@ -35,8 +35,7 @@ static char g_route_cidr[64];
 static int g_route_set = 0;
 
 static void usage(const char *prog) {
-    fprintf(stderr, "Usage: %s -s <server> -p <port> -a <ca> -u <user> -w <pass>
-", prog);
+    fprintf(stderr, "Usage: %s -s <server> -p <port> -a <ca> -u <user> -w <pass>\n", prog);
 }
 
 static void handle_signal(int sig) {
