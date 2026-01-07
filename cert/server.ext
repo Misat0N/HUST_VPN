@@ -1,0 +1,3 @@
+subjectAltName = DNS:vpnserver.com
+keyUsage = digitalSignature, keyEncipherment
+extendedKeyUsage = serverAuth

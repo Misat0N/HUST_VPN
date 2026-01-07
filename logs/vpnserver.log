@@ -1,0 +1,4 @@
+[2026-01-07 22:35:44] INFO: cmd: ip addr replace 192.168.53.1/24 dev tun0
+[2026-01-07 22:35:44] INFO: cmd: ip link set dev tun0 up mtu 1400
+[2026-01-07 22:35:44] INFO: vpnserver listening on 10.0.2.8:4433
+[2026-01-07 22:35:48] INFO: client authenticated user=seed ip=192.168.53.10
