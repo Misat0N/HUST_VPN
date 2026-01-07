@@ -52,6 +52,17 @@ sudo scripts/05_run_server.sh
 sudo VPN_USER=<gateway_user> VPN_PASS=<gateway_pass> scripts/06_run_client.sh
 ```
 
+## Recovery after tunnel break
+
+```
+sudo scripts/09_recover.sh
+```
+
+Notes:
+- 09_recover.sh re-runs 03, 05, and 06 in order.
+- You can provide credentials via environment variables:
+  `sudo VPN_USER=... VPN_PASS=... scripts/09_recover.sh`
+
 Notes:
 - The client validates the server certificate chain and hostname (vpnserver.com).
 - scripts/06_run_client.sh updates /etc/hosts inside HostU to map
@@ -165,6 +176,17 @@ sudo scripts/05_run_server.sh
 # 在 HostU 容器中启动客户端
 sudo VPN_USER=<gateway_user> VPN_PASS=<gateway_pass> scripts/06_run_client.sh
 ```
+
+## 断线后的恢复
+
+```
+sudo scripts/09_recover.sh
+```
+
+说明：
+- 09_recover.sh 会按顺序重新执行 03、05、06。
+- 也可用环境变量传入账号口令：
+  `sudo VPN_USER=... VPN_PASS=... scripts/09_recover.sh`
 
 说明：
 - 客户端会验证服务端证书链并校验主机名（vpnserver.com）。
