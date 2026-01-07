@@ -39,7 +39,7 @@ docker cp "$BIN" HostU:/opt/sslvpn/vpnclient
 docker cp "$CERT_DIR/ca.crt" HostU:/opt/sslvpn/ca.crt
 
 log "update /etc/hosts in HostU"
-docker exec HostU sh -c "sed -i '/vpnserver.com/d' /etc/hosts && echo '$SERVER_IP vpnserver.com' >> /etc/hosts"
+docker exec HostU sh -c "grep -v 'vpnserver.com' /etc/hosts > /tmp/hosts && echo \"$SERVER_IP vpnserver.com\" >> /tmp/hosts && cat /tmp/hosts > /etc/hosts"
 
 MODE="${1:-}"
 if [[ "$MODE" == "-d" ]]; then
