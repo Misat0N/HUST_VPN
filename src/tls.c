@@ -58,6 +58,17 @@ static int verify_hostname(SSL *ssl, const char *servername) {
 #endif
 }
 
+static int verify_cb(int ok, X509_STORE_CTX *ctx) {
+    if (ok) {
+        return 1;
+    }
+    int err = X509_STORE_CTX_get_error(ctx);
+    int depth = X509_STORE_CTX_get_error_depth(ctx);
+    const char *msg = X509_verify_cert_error_string(err);
+    LOG_ERR("certificate verify failed (depth %d): %s", depth, msg);
+    return 0;
+}
+
 int tls_init(void) {
 #if OPENSSL_VERSION_NUMBER >= 0x10100000L
     if (OPENSSL_init_ssl(0, NULL) != 1) {
@@ -157,7 +168,7 @@ SSL_CTX *tls_create_client_ctx(const char *ca) {
     }
     set_min_tls12(ctx);
     SSL_CTX_set_options(ctx, SSL_OP_NO_COMPRESSION);
-    SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, NULL);
+    SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, verify_cb);
 
     if (!ca || SSL_CTX_load_verify_locations(ctx, ca, NULL) != 1) {
         tls_log_errors("loading CA failed");
@@ -194,7 +205,19 @@ SSL *tls_connect(SSL_CTX *ctx, int fd, const char *servername) {
 #endif
     }
     if (SSL_connect(ssl) != 1) {
-        tls_log_errors("SSL_connect failed");
+        long verify = SSL_get_verify_result(ssl);
+        if (verify != X509_V_OK) {
+            const char *vmsg = X509_verify_cert_error_string(verify);
+            if (verify == X509_V_ERR_CERT_HAS_EXPIRED) {
+                LOG_ERR("certificate expired: %s", vmsg);
+            } else if (verify == X509_V_ERR_CERT_NOT_YET_VALID) {
+                LOG_ERR("certificate not yet valid: %s", vmsg);
+            } else {
+                LOG_ERR("certificate verify failed: %s", vmsg);
+            }
+        } else {
+            tls_log_errors("SSL_connect failed");
+        }
         SSL_free(ssl);
         return NULL;
     }
