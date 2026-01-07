@@ -44,8 +44,10 @@ docker exec HostU sh -c "grep -v 'vpnserver.com' /etc/hosts > /tmp/hosts && echo
 MODE="${1:-}"
 if [[ "$MODE" == "-d" ]]; then
   log "starting vpnclient in background"
-  docker exec -d     -e VPN_USER="$VPN_USER" -e VPN_PASS="$VPN_PASS"     HostU /opt/sslvpn/vpnclient -s "$SERVER_HOST" -p "$PORT" -a /opt/sslvpn/ca.crt
+  docker exec -d HostU env VPN_USER="$VPN_USER" VPN_PASS="$VPN_PASS" \
+    /opt/sslvpn/vpnclient -s "$SERVER_HOST" -p "$PORT" -a /opt/sslvpn/ca.crt
 else
   log "starting vpnclient in foreground"
-  docker exec -it     -e VPN_USER="$VPN_USER" -e VPN_PASS="$VPN_PASS"     HostU /opt/sslvpn/vpnclient -s "$SERVER_HOST" -p "$PORT" -a /opt/sslvpn/ca.crt
+  docker exec -it HostU env VPN_USER="$VPN_USER" VPN_PASS="$VPN_PASS" \
+    /opt/sslvpn/vpnclient -s "$SERVER_HOST" -p "$PORT" -a /opt/sslvpn/ca.crt
 fi
