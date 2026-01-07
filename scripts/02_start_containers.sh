@@ -26,6 +26,19 @@ ensure_container() {
 ensure_container "HostU" "extranet" "10.0.2.7"
 ensure_container "HostV" "intranet" "192.168.60.101"
 
+if [[ -n "${EXTRA_HOSTU:-}" ]]; then
+  log "extra HostU list: $EXTRA_HOSTU"
+  for item in $EXTRA_HOSTU; do
+    name="${item%%:*}"
+    ip="${item##*:}"
+    if [[ -z "$name" || -z "$ip" || "$name" == "$ip" ]]; then
+      log "skip invalid extra entry: $item"
+      continue
+    fi
+    ensure_container "$name" "extranet" "$ip"
+  done
+fi
+
 log "container IPs"
 docker inspect -f '{{.Name}} {{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' HostU HostV
 

@@ -12,6 +12,8 @@ CERT_DIR="$ROOT_DIR/cert"
 SERVER_HOST="${SERVER_HOST:-vpnserver.com}"
 SERVER_IP="${SERVER_IP:-10.0.2.8}"
 PORT="${PORT:-4433}"
+CLIENT_NAME="${CLIENT_NAME:-HostU}"
+CLIENT_DIR="${CLIENT_DIR:-/opt/sslvpn}"
 
 if [[ "$EUID" -ne 0 ]]; then
   log "must run as root"
@@ -29,25 +31,25 @@ if [[ -z "${VPN_USER:-}" || -z "${VPN_PASS:-}" ]]; then
 fi
 
 log "ensure HostU is running"
-docker start HostU >/dev/null 2>&1 || true
+docker start "$CLIENT_NAME" >/dev/null 2>&1 || true
 
 log "copy client and CA to HostU"
-docker exec HostU mkdir -p /opt/sslvpn
+docker exec "$CLIENT_NAME" mkdir -p "$CLIENT_DIR"
 
-docker cp "$BIN" HostU:/opt/sslvpn/vpnclient
+docker cp "$BIN" "$CLIENT_NAME":"$CLIENT_DIR"/vpnclient
 
-docker cp "$CERT_DIR/ca.crt" HostU:/opt/sslvpn/ca.crt
+docker cp "$CERT_DIR/ca.crt" "$CLIENT_NAME":"$CLIENT_DIR"/ca.crt
 
 log "update /etc/hosts in HostU"
-docker exec HostU sh -c "grep -v 'vpnserver.com' /etc/hosts > /tmp/hosts && echo \"$SERVER_IP vpnserver.com\" >> /tmp/hosts && cat /tmp/hosts > /etc/hosts"
+docker exec "$CLIENT_NAME" sh -c "grep -v '$SERVER_HOST' /etc/hosts > /tmp/hosts && echo \"$SERVER_IP $SERVER_HOST\" >> /tmp/hosts && cat /tmp/hosts > /etc/hosts"
 
 MODE="${1:-}"
 if [[ "$MODE" == "-d" ]]; then
   log "starting vpnclient in background"
-  docker exec -d HostU env VPN_USER="$VPN_USER" VPN_PASS="$VPN_PASS" \
-    /opt/sslvpn/vpnclient -s "$SERVER_HOST" -p "$PORT" -a /opt/sslvpn/ca.crt
+  docker exec -d "$CLIENT_NAME" env VPN_USER="$VPN_USER" VPN_PASS="$VPN_PASS" \
+    "$CLIENT_DIR"/vpnclient -s "$SERVER_HOST" -p "$PORT" -a "$CLIENT_DIR"/ca.crt
 else
   log "starting vpnclient in foreground"
-  docker exec -it HostU env VPN_USER="$VPN_USER" VPN_PASS="$VPN_PASS" \
-    /opt/sslvpn/vpnclient -s "$SERVER_HOST" -p "$PORT" -a /opt/sslvpn/ca.crt
+  docker exec -it "$CLIENT_NAME" env VPN_USER="$VPN_USER" VPN_PASS="$VPN_PASS" \
+    "$CLIENT_DIR"/vpnclient -s "$SERVER_HOST" -p "$PORT" -a "$CLIENT_DIR"/ca.crt
 fi

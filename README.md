@@ -12,6 +12,7 @@ reading /etc/shadow).
 
 - Ubuntu VM as VPN gateway with Docker
 - Packages: build-essential, libssl-dev, libcrypt-dev, tcpdump, docker
+- Packages (optional UI): whiptail or dialog
 - A seedubuntu image for HostU and HostV
 
 ## Topology (fixed by scripts)
@@ -68,6 +69,30 @@ Notes:
 - scripts/06_run_client.sh updates /etc/hosts inside HostU to map
   vpnserver.com -> 10.0.2.8.
 
+## Certificate subject (personal info)
+
+`scripts/04_cert_setup.sh` embeds personal info into the server certificate subject.
+You can set it by environment variables (recommended for repeatability):
+
+```
+sudo CERT_NAME="Your Name" CERT_ID="YourID" CERT_EMAIL="you@example.com" scripts/04_cert_setup.sh --force
+```
+
+The subject includes `OU=<name>` and `UID=<student_id>` for the checker.
+If not provided, the script will prompt for CERT_NAME and CERT_ID.
+
+## Certificate expiration test
+
+Set the VPN client time after the certificate validity to trigger a failure:
+
+```
+sudo docker exec -it HostU date -s "2035-01-01 00:00:00"
+sudo VPN_USER=... VPN_PASS=... scripts/06_run_client.sh
+```
+
+You should see a certificate expiration error on the client.
+Remember to restore the time afterward.
+
 ## Verification
 
 Basic ping:
@@ -116,12 +141,38 @@ sudo scripts/08_capture.sh -i tun0 -n 192.168.53.0/24
 
 Captures are saved to `captures/`.
 
+## Multiple clients
+
+Start extra client containers by setting `EXTRA_HOSTU`:
+
+```
+sudo EXTRA_HOSTU="HostU2:10.0.2.9 HostU3:10.0.2.10" scripts/02_start_containers.sh
+sudo VPN_USER=... VPN_PASS=... CLIENT_NAME=HostU2 scripts/06_run_client.sh
+sudo VPN_USER=... VPN_PASS=... CLIENT_NAME=HostU3 scripts/06_run_client.sh
+```
+
+To disconnect one client only:
+
+```
+sudo docker exec HostU2 pkill vpnclient
+```
+
+## UI launcher
+
+```
+sudo scripts/10_ui.sh
+```
+
+It uses `whiptail` or `dialog` if installed, otherwise falls back to a basic text menu.
+The UI includes an option to add a local user (for VPN auth) on the gateway VM.
+Select `Language/语言` in the menu to toggle English/中文.
+
 ## Files
 
 - src/vpnserver.c: server with multi-client support and /etc/shadow auth
 - src/vpnclient.c: client with TLS hostname verification and TUN setup
 - src/protocol.*: framing + TLV control protocol
-- scripts/: environment and run scripts
+- scripts/: environment and run scripts (includes 09_recover.sh, 10_ui.sh, 11_add_user.sh)
 
 ---
 
@@ -137,6 +188,7 @@ Captures are saved to `captures/`.
 
 - 作为 VPN 网关的 Ubuntu 虚拟机 + Docker
 - 软件包：build-essential, libssl-dev, libcrypt-dev, tcpdump, docker
+- 可选 UI：whiptail 或 dialog
 - HostU/HostV 使用 seedubuntu 镜像
 
 ## 拓扑（脚本固定）
@@ -188,6 +240,29 @@ sudo scripts/09_recover.sh
 - 也可用环境变量传入账号口令：
   `sudo VPN_USER=... VPN_PASS=... scripts/09_recover.sh`
 
+## 证书主题（包含个人信息）
+
+`scripts/04_cert_setup.sh` 会把个人信息写入服务端证书主题。
+建议用环境变量指定，便于复现实验：
+
+```
+sudo CERT_NAME="你的姓名" CERT_ID="学号" CERT_EMAIL="you@example.com" scripts/04_cert_setup.sh --force
+```
+
+主题中包含 `OU=<姓名>` 与 `UID=<学号>`，满足检查项。
+若未提供，将在脚本中提示输入 CERT_NAME/CERT_ID。
+
+## 证书过期测试
+
+将 VPN 客户端时间调到证书有效期之后触发失败：
+
+```
+sudo docker exec -it HostU date -s "2035-01-01 00:00:00"
+sudo VPN_USER=... VPN_PASS=... scripts/06_run_client.sh
+```
+
+客户端应提示证书过期。测试后记得把时间改回。
+
 说明：
 - 客户端会验证服务端证书链并校验主机名（vpnserver.com）。
 - scripts/06_run_client.sh 会在 HostU 内修改 /etc/hosts，映射
@@ -237,9 +312,33 @@ sudo scripts/08_capture.sh -i tun0 -n 192.168.53.0/24
 
 抓包文件保存在 `captures/`。
 
+## 多客户端
+
+用 `EXTRA_HOSTU` 启动额外客户端容器：
+
+```
+sudo EXTRA_HOSTU="HostU2:10.0.2.9 HostU3:10.0.2.10" scripts/02_start_containers.sh
+sudo VPN_USER=... VPN_PASS=... CLIENT_NAME=HostU2 scripts/06_run_client.sh
+sudo VPN_USER=... VPN_PASS=... CLIENT_NAME=HostU3 scripts/06_run_client.sh
+```
+
+只断开其中一个客户端：
+
+```
+sudo docker exec HostU2 pkill vpnclient
+```
+
+## UI 启动器
+
+```
+sudo scripts/10_ui.sh
+```
+
+如果系统有 `whiptail` 或 `dialog` 会显示菜单界面，否则降级为文本菜单。
+UI 菜单包含“添加本地用户”，用于在网关 VM 创建可认证账号。
 ## 文件说明
 
 - src/vpnserver.c：服务端，支持多客户端与 /etc/shadow 认证
 - src/vpnclient.c：客户端，支持 TLS 主机名校验与 TUN 配置
 - src/protocol.*：分帧 + TLV 控制协议
-- scripts/：环境与运行脚本
+- scripts/：环境与运行脚本（包含 09_recover.sh、10_ui.sh、11_add_user.sh）

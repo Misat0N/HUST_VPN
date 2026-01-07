@@ -200,7 +200,14 @@ SSL *tls_connect(SSL_CTX *ctx, int fd, const char *servername) {
     }
     long verify = SSL_get_verify_result(ssl);
     if (verify != X509_V_OK) {
-        LOG_ERR("certificate verify failed: %ld", verify);
+        const char *vmsg = X509_verify_cert_error_string(verify);
+        if (verify == X509_V_ERR_CERT_HAS_EXPIRED) {
+            LOG_ERR("certificate expired: %s", vmsg);
+        } else if (verify == X509_V_ERR_CERT_NOT_YET_VALID) {
+            LOG_ERR("certificate not yet valid: %s", vmsg);
+        } else {
+            LOG_ERR("certificate verify failed: %s", vmsg);
+        }
         SSL_free(ssl);
         return NULL;
     }
