@@ -61,6 +61,15 @@ tr() {
         opt19) echo "退出" ;;
         select) echo "请选择操作:" ;;
         press_enter) echo "按回车继续" ;;
+        status_ok) echo "成功" ;;
+        status_fail) echo "失败" ;;
+        lang_switched) echo "语言已切换" ;;
+        msg_need_userpass) echo "请输入 VPN 用户名和口令" ;;
+        msg_need_clientlist) echo "客户端列表不能为空" ;;
+        msg_cert_missing) echo "未找到 cert/server.crt" ;;
+        msg_need_certinfo) echo "请填写证书姓名和学号" ;;
+        msg_need_newuser) echo "请输入新用户名和口令" ;;
+        msg_no_container) echo "容器不存在" ;;
         extra_title) echo "额外客户端" ;;
         extra_prompt) echo "额外 HostU 列表（name:ip ...），留空跳过:" ;;
         clients_title) echo "多客户端" ;;
@@ -126,6 +135,15 @@ tr() {
         opt19) echo "Exit" ;;
         select) echo "Select action:" ;;
         press_enter) echo "Press Enter to continue" ;;
+        status_ok) echo "SUCCESS" ;;
+        status_fail) echo "FAILED" ;;
+        lang_switched) echo "Language switched" ;;
+        msg_need_userpass) echo "VPN user/pass required" ;;
+        msg_need_clientlist) echo "client list required" ;;
+        msg_cert_missing) echo "cert/server.crt not found" ;;
+        msg_need_certinfo) echo "cert name/id required" ;;
+        msg_need_newuser) echo "new username/password required" ;;
+        msg_no_container) echo "container not found" ;;
         extra_title) echo "Extra Clients" ;;
         extra_prompt) echo "Extra HostU list (name:ip ...), blank to skip:" ;;
         clients_title) echo "Multiple Clients" ;;
@@ -194,6 +212,54 @@ pause_box() {
   fi
 }
 
+status_text() {
+  local rc="$1"
+  if [[ "$rc" -eq 0 ]]; then
+    echo "$(tr status_ok)"
+  else
+    echo "$(tr status_fail)"
+  fi
+}
+
+show_textbox() {
+  local title="$1"
+  local file="$2"
+  if [[ "$UI" == "whiptail" ]]; then
+    whiptail --title "$title" --textbox "$file" 20 78
+  elif [[ "$UI" == "dialog" ]]; then
+    dialog --stdout --title "$title" --textbox "$file" 20 78
+  else
+    cat "$file"
+    pause_box
+  fi
+}
+
+show_result() {
+  local title="$1"
+  local rc="$2"
+  local out_file="${3:-}"
+  local tmp
+  tmp="$(mktemp)"
+  printf "%s\n" "$(status_text "$rc")" >"$tmp"
+  if [[ -n "$out_file" && -s "$out_file" ]]; then
+    printf "\n" >>"$tmp"
+    cat "$out_file" >>"$tmp"
+  fi
+  show_textbox "$title" "$tmp"
+  rm -f "$tmp"
+}
+
+show_message() {
+  local title="$1"
+  local rc="$2"
+  local msg="$3"
+  local tmp
+  tmp="$(mktemp)"
+  printf "%s\n\n%s\n" "$(status_text "$rc")" "$msg" >"$tmp"
+  show_textbox "$title" "$tmp"
+  rm -f "$tmp"
+}
+
 ensure_container() {
   local name="$1"
   docker start "$name" >/dev/null 2>&1 || true
@@ -203,27 +269,24 @@ show_output() {
   local title="$1"
   shift
   local tmp
+  local rc=0
   tmp="$(mktemp)"
-  if ! "$@" >"$tmp" 2>&1; then
-    echo "command failed" >>"$tmp"
-  fi
-  if [[ "$UI" == "whiptail" ]]; then
-    whiptail --title "$title" --textbox "$tmp" 20 78
-  elif [[ "$UI" == "dialog" ]]; then
-    dialog --stdout --title "$title" --textbox "$tmp" 20 78
-  else
-    cat "$tmp"
-    pause_box
-  fi
+  "$@" >"$tmp" 2>&1 || rc=$?
+  show_result "$title" "$rc" "$tmp"
   rm -f "$tmp"
+  return "$rc"
 }
 
 run_interactive() {
+  local title="$1"
+  shift
+  local rc=0
   if [[ "$UI" == "whiptail" || "$UI" == "dialog" ]]; then
     clear
   fi
-  "$@" || true
-  pause_box
+  "$@" || rc=$?
+  show_result "$title" "$rc" ""
+  return "$rc"
 }
 
 input_box() {
@@ -323,30 +386,19 @@ while true; do
   choice="$(menu_box || true)"
   case "$choice" in
     1)
-      if ! "$STEP00"; then
-        pause_box
-        continue
-      fi
-      if ! "$STEP01"; then
-        pause_box
-        continue
-      fi
+      tmp="$(mktemp)"
+      rc=0
+      "$STEP00" >>"$tmp" 2>&1 || rc=1
+      "$STEP01" >>"$tmp" 2>&1 || rc=1
       extra="$(input_box "$(tr extra_title)" "$(tr extra_prompt)" "")"
       if [[ -n "$extra" ]]; then
-        if ! EXTRA_HOSTU="$extra" "$STEP02"; then
-          pause_box
-          continue
-        fi
+        EXTRA_HOSTU="$extra" "$STEP02" >>"$tmp" 2>&1 || rc=1
       else
-        if ! "$STEP02"; then
-          pause_box
-          continue
-        fi
+        "$STEP02" >>"$tmp" 2>&1 || rc=1
       fi
-      if ! "$STEP03"; then
-        pause_box
-        continue
-      fi
+      "$STEP03" >>"$tmp" 2>&1 || rc=1
+      show_result "$(tr opt1)" "$rc" "$tmp"
+      rm -f "$tmp"
       ;;
     2)
       cname="$(input_box "$(tr cert_name_title)" "$(tr cert_name_prompt)" "")"
@@ -357,24 +409,23 @@ while true; do
       if is_yes "$force"; then
         args+=(--force)
       fi
-      if ! CERT_NAME="$cname" CERT_ID="$cid" CERT_EMAIL="$cemail" "$STEP04" "${args[@]}"; then
-        pause_box
+      if [[ -z "$cname" || -z "$cid" ]]; then
+        show_message "$(tr opt2)" 1 "$(tr msg_need_certinfo)"
+      else
+        show_output "$(tr opt2)" env CERT_NAME="$cname" CERT_ID="$cid" CERT_EMAIL="$cemail" "$STEP04" "${args[@]}"
       fi
       ;;
     3)
-      if ! "$STEP05"; then
-        pause_box
-      fi
+      show_output "$(tr opt3)" "$STEP05"
       ;;
     4)
       cname="$(input_box "$(tr client_title)" "$(tr client_prompt)" "HostU")"
       user="$(input_box "$(tr user_title)" "$(tr user_prompt)" "")"
       pass="$(password_box "$(tr pass_title)" "$(tr pass_prompt)")"
       if [[ -z "$user" || -z "$pass" ]]; then
-        log "VPN user/pass required"
-        pause_box
-      elif ! VPN_USER="$user" VPN_PASS="$pass" CLIENT_NAME="$cname" "$STEP06"; then
-        pause_box
+        show_message "$(tr opt4)" 1 "$(tr msg_need_userpass)"
+      else
+        run_interactive "$(tr opt4)" env VPN_USER="$user" VPN_PASS="$pass" CLIENT_NAME="$cname" "$STEP06"
       fi
       ;;
     5)
@@ -382,39 +433,36 @@ while true; do
       user="$(input_box "$(tr user_title)" "$(tr user_prompt)" "")"
       pass="$(password_box "$(tr pass_title)" "$(tr pass_prompt)")"
       if [[ -z "$user" || -z "$pass" ]]; then
-        log "VPN user/pass required"
-        pause_box
-      elif ! VPN_USER="$user" VPN_PASS="$pass" CLIENT_NAME="$cname" "$STEP06" -d; then
-        pause_box
+        show_message "$(tr opt5)" 1 "$(tr msg_need_userpass)"
+      else
+        show_output "$(tr opt5)" env VPN_USER="$user" VPN_PASS="$pass" CLIENT_NAME="$cname" "$STEP06" -d
       fi
       ;;
     6)
       list="$(input_box "$(tr clients_title)" "$(tr clients_prompt)" "")"
       if [[ -z "$list" ]]; then
-        log "client list required"
-        pause_box
+        show_message "$(tr opt6)" 1 "$(tr msg_need_clientlist)"
         continue
       fi
       user="$(input_box "$(tr user_title)" "$(tr user_prompt)" "")"
       pass="$(password_box "$(tr pass_title)" "$(tr pass_prompt)")"
       if [[ -z "$user" || -z "$pass" ]]; then
-        log "VPN user/pass required"
-        pause_box
+        show_message "$(tr opt6)" 1 "$(tr msg_need_userpass)"
         continue
       fi
+      tmp="$(mktemp)"
+      rc=0
       for cname in $list; do
-        if ! VPN_USER="$user" VPN_PASS="$pass" CLIENT_NAME="$cname" "$STEP06" -d; then
-          log "client $cname failed"
-        fi
+        env VPN_USER="$user" VPN_PASS="$pass" CLIENT_NAME="$cname" "$STEP06" -d >>"$tmp" 2>&1 || rc=1
       done
-      pause_box
+      show_result "$(tr opt6)" "$rc" "$tmp"
+      rm -f "$tmp"
       ;;
     7)
       if [[ -f "$ROOT_DIR/cert/server.crt" ]]; then
         show_output "$(tr cert_info_title)" openssl x509 -in "$ROOT_DIR/cert/server.crt" -noout -subject -issuer -dates
       else
-        log "cert/server.crt not found"
-        pause_box
+        show_message "$(tr opt7)" 1 "$(tr msg_cert_missing)"
       fi
       ;;
     8)
@@ -422,38 +470,37 @@ while true; do
       tstr="$(input_box "$(tr time_title)" "$(tr time_prompt)" "2038-01-01 00:00:00")"
       if [[ -n "$tstr" ]]; then
         ensure_container "$cname"
-        show_output "$(tr time_title)" docker exec "$cname" date -s "$tstr"
+        show_output "$(tr opt8)" docker exec "$cname" date -s "$tstr"
       fi
       ;;
     9)
       cname="$(input_box "$(tr client_title)" "$(tr client_prompt)" "HostU")"
       ensure_container "$cname"
       host_time="$(date '+%Y-%m-%d %H:%M:%S')"
-      show_output "$(tr time_reset_title)" docker exec "$cname" date -s "$host_time"
+      show_output "$(tr opt9)" docker exec "$cname" date -s "$host_time"
       ;;
     10)
       cname="$(input_box "$(tr client_title)" "$(tr client_prompt)" "HostU")"
       ensure_container "$cname"
-      run_interactive docker exec -it "$cname" ping -c 3 "$HOSTV_IP"
+      run_interactive "$(tr opt10)" docker exec -it "$cname" ping -c 3 "$HOSTV_IP"
       ;;
     11)
       cname="$(input_box "$(tr client_title)" "$(tr client_prompt)" "HostU")"
       ensure_container "$cname"
-      run_interactive docker exec -it "$cname" telnet "$HOSTV_IP"
+      run_interactive "$(tr opt11)" docker exec -it "$cname" telnet "$HOSTV_IP"
       ;;
     12)
       cname="$(input_box "$(tr client_title)" "$(tr client_prompt)" "HostU")"
       ensure_container "$cname"
-      show_output "$(tr status_title)" docker exec "$cname" sh -c "ip addr show dev tun0; echo; ip route show | grep 192.168.60.0/24 || true"
+      show_output "$(tr opt12)" docker exec "$cname" sh -c "ip addr show dev tun0; echo; ip route show | grep 192.168.60.0/24 || true"
       ;;
     13)
       user="$(input_box "$(tr user_title)" "$(tr user_prompt)" "")"
       pass="$(password_box "$(tr pass_title)" "$(tr pass_prompt)")"
       if [[ -z "$user" || -z "$pass" ]]; then
-        log "VPN user/pass required"
-        pause_box
-      elif ! VPN_USER="$user" VPN_PASS="$pass" "$STEP09"; then
-        pause_box
+        show_message "$(tr opt13)" 1 "$(tr msg_need_userpass)"
+      else
+        show_output "$(tr opt13)" env VPN_USER="$user" VPN_PASS="$pass" "$STEP09"
       fi
       ;;
     14)
@@ -465,8 +512,10 @@ while true; do
       else
         addsudo="no"
       fi
-      if ! NEW_USER="$nuser" NEW_PASS="$npass" ADD_SUDO="$addsudo" "$STEP11"; then
-        pause_box
+      if [[ -z "$nuser" || -z "$npass" ]]; then
+        show_message "$(tr opt14)" 1 "$(tr msg_need_newuser)"
+      else
+        show_output "$(tr opt14)" env NEW_USER="$nuser" NEW_PASS="$npass" ADD_SUDO="$addsudo" "$STEP11"
       fi
       ;;
     15)
@@ -480,29 +529,29 @@ while true; do
       if [[ -n "$net" ]]; then
         args+=(-n "$net")
       fi
-      if ! "$STEP08" "${args[@]}"; then
-        pause_box
-      fi
+      run_interactive "$(tr opt15)" "$STEP08" "${args[@]}"
       ;;
     16)
       cname="$(input_box "$(tr client_title)" "$(tr client_prompt)" "HostU")"
+      if ! docker inspect "$cname" >/dev/null 2>&1; then
+        show_message "$(tr opt16)" 1 "$(tr msg_no_container)"
+        continue
+      fi
       ensure_container "$cname"
-      log "stopping vpnclient in $cname"
-      docker exec "$cname" pkill vpnclient >/dev/null 2>&1 || true
-      docker exec "$cname" ip link del tun0 >/dev/null 2>&1 || true
-      docker exec "$cname" ip route del 192.168.60.0/24 >/dev/null 2>&1 || true
-      pause_box
+      tmp="$(mktemp)"
+      rc=0
+      docker exec "$cname" pkill vpnclient >>"$tmp" 2>&1 || true
+      docker exec "$cname" ip link del tun0 >>"$tmp" 2>&1 || true
+      docker exec "$cname" ip route del 192.168.60.0/24 >>"$tmp" 2>&1 || true
+      show_result "$(tr opt16)" "$rc" "$tmp"
+      rm -f "$tmp"
       ;;
     17)
       purge="$(input_box "$(tr purge_title)" "$(tr purge_prompt)" "$(default_no)")"
       if is_yes "$purge"; then
-        if ! "$STEP07" --purge; then
-          pause_box
-        fi
+        show_output "$(tr opt17)" "$STEP07" --purge
       else
-        if ! "$STEP07"; then
-          pause_box
-        fi
+        show_output "$(tr opt17)" "$STEP07"
       fi
       ;;
     18)
@@ -511,6 +560,7 @@ while true; do
       else
         LANG_MODE="ZH"
       fi
+      show_message "$(tr opt18)" 0 "$(tr lang_switched)"
       ;;
     19|*)
       break
