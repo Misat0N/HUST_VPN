@@ -56,10 +56,14 @@ if [[ -n "${EXTRA_HOSTU:-}" ]]; then
 fi
 
 log "container IPs"
-docker exec HostU sh -c "echo HostU \$(ip -4 addr show dev eth0 | awk '/inet /{print \\$2}')"
-docker exec HostU2 sh -c "echo HostU2 \$(ip -4 addr show dev eth0 | awk '/inet /{print \\$2}')"
-docker exec HostU3 sh -c "echo HostU3 \$(ip -4 addr show dev eth0 | awk '/inet /{print \\$2}')"
-docker exec HostV sh -c "echo HostV \$(ip -4 addr show dev eth0 | awk '/inet /{print \\$2}')"
+get_ip() {
+  local name="$1"
+  docker exec "$name" sh -c "ip -4 -o addr show dev eth0 | sed -n 's/.* inet \\([^ ]*\\) .*/\\1/p'" 2>/dev/null | head -n1 || true
+}
+echo "HostU $(get_ip HostU)"
+echo "HostU2 $(get_ip HostU2)"
+echo "HostU3 $(get_ip HostU3)"
+echo "HostV $(get_ip HostV)"
 
 log "HostU routes"
 docker exec HostU ip route
