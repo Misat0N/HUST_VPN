@@ -18,6 +18,8 @@ STEP08="$ROOT_DIR/scripts/08_capture.sh"
 STEP09="$ROOT_DIR/scripts/09_recover.sh"
 STEP11="$ROOT_DIR/scripts/11_add_user.sh"
 
+UI_LOG_DIR="$ROOT_DIR/logs"
+UI_LOG="$UI_LOG_DIR/ui_last.log"
 HOSTV_IP="${HOSTV_IP:-192.168.60.101}"
 LANG_MODE="${LANG_MODE:-EN}"
 
@@ -64,6 +66,8 @@ tr() {
         status_ok) echo "成功" ;;
         status_fail) echo "失败" ;;
         lang_switched) echo "语言已切换" ;;
+        log_saved) echo "日志已保存" ;;
+        scroll_hint) echo "可用 ↑↓ PgUp/PgDn 滚动" ;;
         msg_need_userpass) echo "请输入 VPN 用户名和口令" ;;
         msg_need_clientlist) echo "客户端列表不能为空" ;;
         msg_cert_missing) echo "未找到 cert/server.crt" ;;
@@ -138,6 +142,8 @@ tr() {
         status_ok) echo "SUCCESS" ;;
         status_fail) echo "FAILED" ;;
         lang_switched) echo "Language switched" ;;
+        log_saved) echo "Log saved" ;;
+        scroll_hint) echo "Use Up/Down/PgUp/PgDn to scroll" ;;
         msg_need_userpass) echo "VPN user/pass required" ;;
         msg_need_clientlist) echo "client list required" ;;
         msg_cert_missing) echo "cert/server.crt not found" ;;
@@ -239,14 +245,29 @@ show_result() {
   local rc="$2"
   local out_file="${3:-}"
   local tmp
+  local disp
+  local logtmp
   tmp="$(mktemp)"
   printf "%s\n" "$(status_text "$rc")" >"$tmp"
   if [[ -n "$out_file" && -s "$out_file" ]]; then
     printf "\n" >>"$tmp"
     cat "$out_file" >>"$tmp"
   fi
-  show_textbox "$title" "$tmp"
-  rm -f "$tmp"
+
+  mkdir -p "$UI_LOG_DIR"
+  logtmp="$(mktemp)"
+  printf "[%s] %s\n" "$(date '+%Y-%m-%d %H:%M:%S')" "$title" >"$logtmp"
+  cat "$tmp" >>"$logtmp"
+  mv "$logtmp" "$UI_LOG"
+
+  disp="$(mktemp)"
+  printf "%s\n%s: %s\n%s\n" "$(status_text "$rc")" "$(tr log_saved)" "$UI_LOG" "$(tr scroll_hint)" >"$disp"
+  if [[ -n "$out_file" && -s "$out_file" ]]; then
+    printf "\n" >>"$disp"
+    cat "$out_file" >>"$disp"
+  fi
+  show_textbox "$title" "$disp"
+  rm -f "$tmp" "$disp"
 }
 
 show_message() {
@@ -255,8 +276,8 @@ show_message() {
   local msg="$3"
   local tmp
   tmp="$(mktemp)"
-  printf "%s\n\n%s\n" "$(status_text "$rc")" "$msg" >"$tmp"
-  show_textbox "$title" "$tmp"
+  printf "%s\n" "$msg" >"$tmp"
+  show_result "$title" "$rc" "$tmp"
   rm -f "$tmp"
 }
 

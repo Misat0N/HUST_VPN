@@ -7,6 +7,15 @@ log() {
 
 ensure_container() {
   local name="$1" net="$2" ip="$3"
+  local net_flag="--network"
+  local ip_flag="--ip"
+  if ! docker run --help 2>/dev/null | grep -q -- "--network"; then
+    net_flag="--net"
+  fi
+  if ! docker run --help 2>/dev/null | grep -q -- "--ip"; then
+    log "docker run does not support --ip; please upgrade docker"
+    exit 1
+  fi
   if docker inspect "$name" >/dev/null 2>&1; then
     if [[ "$(docker inspect -f '{{.State.Running}}' "$name")" != "true" ]]; then
       log "starting existing container $name"
@@ -16,7 +25,7 @@ ensure_container() {
     fi
   else
     log "creating container $name"
-    docker run -d --name "$name" --privileged       --network "$net" --ip "$ip" seedubuntu       bash -c "sleep infinity"
+    docker run -d --name "$name" --privileged       "$net_flag" "$net" "$ip_flag" "$ip" seedubuntu       bash -c "sleep infinity"
   fi
 
   log "remove default route in $name"
